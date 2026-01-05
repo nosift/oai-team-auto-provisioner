@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT Team 席位兑换</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: #ffffff;
+            border: 1px solid #e5e5e5;
+            border-radius: 20px;
+            max-width: 480px;
+            width: 100%;
+            padding: 48px 40px;
+            animation: fadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            color: #1d1d1f;
+            text-align: center;
+            margin-bottom: 8px;
+            font-size: 32px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #86868b;
+            margin-bottom: 32px;
+            font-size: 15px;
+            font-weight: 400;
+            line-height: 1.4;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #1d1d1f;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid #d2d2d7;
+            border-radius: 12px;
+            font-size: 17px;
+            transition: all 0.2s ease;
+            background: #fafafa;
+            color: #1d1d1f;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #000000;
+            background: #ffffff;
+        }
+
+        input::placeholder {
+            color: #86868b;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: #000000;
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            font-size: 17px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: #1d1d1f;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn:disabled {
+            background: #d2d2d7;
+            color: #86868b;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 20px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            display: none;
+            animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 15px;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.success {
+            background: #f0f9f4;
+            color: #1d4428;
+            border: 1px solid #d1f0dc;
+        }
+
+        .message.error {
+            background: #fff0f0;
+            color: #6e1616;
+            border: 1px solid #ffd8d8;
+        }
+
+        .message.info {
+            background: #f5f5f7;
+            color: #1d1d1f;
+            border: 1px solid #d2d2d7;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            color: #86868b;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .code-info {
+            margin-top: 12px;
+            padding: 12px 14px;
+            background: #f5f5f7;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #1d1d1f;
+            border-left: 3px solid #000000;
+        }
+
+        .code-info strong {
+            color: #000000;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ChatGPT Team 席位兑换</h1>
+        <p class="subtitle">输入您的邮箱和兑换码即可获得Team席位</p>
+
+        <form id="redeemForm">
+            <div class="form-group">
+                <label for="email">邮箱地址</label>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    placeholder="your@email.com"
+                    required
+                    autocomplete="email"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="code">兑换码</label>
+                <input
+                    type="text"
+                    id="code"
+                    name="code"
+                    placeholder="TEAM-XXXX-XXXX-XXXX"
+                    required
+                    style="text-transform: uppercase;"
+                >
+                <div id="codeInfo" class="code-info" style="display: none;"></div>
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn">
+                立即兑换
+            </button>
+        </form>
+
+        <div id="message" class="message"></div>
+
+        <div class="footer">
+            <p>兑换后，邀请邮件将发送到您的邮箱</p>
+            <p>请查收并完成注册</p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('redeemForm');
+        const emailInput = document.getElementById('email');
+        const codeInput = document.getElementById('code');
+        const submitBtn = document.getElementById('submitBtn');
+        const message = document.getElementById('message');
+        const codeInfo = document.getElementById('codeInfo');
+
+        // 兑换码输入时自动验证
+        let verifyTimeout;
+        codeInput.addEventListener('input', function() {
+            const code = this.value.trim().toUpperCase();
+
+            clearTimeout(verifyTimeout);
+
+            if (code.length >= 10) {
+                verifyTimeout = setTimeout(() => {
+                    verifyCode(code);
+                }, 500);
+            } else {
+                codeInfo.style.display = 'none';
+            }
+        });
+
+        // 验证兑换码
+        async function verifyCode(code) {
+            try {
+                const response = await fetch(`/api/verify?code=${encodeURIComponent(code)}`);
+                const result = await response.json();
+
+                if (result.valid) {
+                    codeInfo.innerHTML = `
+                        有效兑换码<br>
+                        <strong>Team:</strong> ${result.team}<br>
+                        <strong>剩余可用次数:</strong> ${result.remaining_uses}
+                        ${result.expires_at ? `<br><strong>过期时间:</strong> ${new Date(result.expires_at).toLocaleString()}` : ''}
+                    `;
+                    codeInfo.style.display = 'block';
+                    codeInfo.style.borderLeft = '3px solid #000000';
+                } else {
+                    codeInfo.innerHTML = `${result.error}`;
+                    codeInfo.style.display = 'block';
+                    codeInfo.style.borderLeft = '3px solid #d2d2d7';
+                }
+            } catch (error) {
+                console.error('验证失败:', error);
+            }
+        }
+
+        // 提交表单
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const email = emailInput.value.trim();
+            const code = codeInput.value.trim().toUpperCase();
+
+            if (!email || !code) {
+                showMessage('请填写所有字段', 'error');
+                return;
+            }
+
+            // 禁用按钮
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading"></span>兑换中...';
+
+            try {
+                const response = await fetch('/api/redeem', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, code })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showMessage(result.message, 'success');
+                    form.reset();
+                    codeInfo.style.display = 'none';
+                } else {
+                    showMessage(result.error, 'error');
+                }
+            } catch (error) {
+                showMessage(`网络错误: ${error.message}`, 'error');
+            } finally {
+                // 恢复按钮
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '立即兑换';
+            }
+        });
+
+        // 显示消息
+        function showMessage(text, type) {
+            message.textContent = text;
+            message.className = `message ${type}`;
+            message.style.display = 'block';
+
+            setTimeout(() => {
+                message.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

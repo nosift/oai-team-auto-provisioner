@@ -40,16 +40,19 @@ def build_invite_headers(team: dict) -> dict:
 
     return {
         "accept": "*/*",
-        "accept-language": "zh-CN,zh;q=0.9",
+        "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
         "authorization": auth_token,
         "chatgpt-account-id": team["account_id"],
         "content-type": "application/json",
         "origin": "https://chatgpt.com",
         "referer": "https://chatgpt.com/",
-        "user-agent": USER_AGENT,
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
         "sec-ch-ua": '"Chromium";v="135", "Not)A;Brand";v="99", "Google Chrome";v="135"',
         "sec-ch-ua-mobile": "?0",
         "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
     }
 
 

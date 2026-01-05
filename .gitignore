@@ -8,23 +8,64 @@ wheels/
 
 # Virtual environments
 .venv
+venv/
+env/
+ENV/
 
-# Sensitive configuration (use config.toml.example as template)
+# ==================== 敏感配置文件 ====================
+# ⚠️ 这些文件包含敏感信息，绝对不要提交到Git！
+
+# 配置文件 (包含管理密码)
 config.toml
 
-# Data files with sensitive information
-accounts.csv
+# Team凭证文件 (包含accessToken等敏感信息)
 team.json
+
+# 数据文件
+accounts.csv
 team_tracker.json
+
+# 数据库文件 (包含兑换记录等敏感数据)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+redemption.db
+test_redemption.db
+
+# 备份文件
+*.bak
+backup/
+backups/
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 nul
+
+# Claude Code
+.claude/
+
+# 环境变量
+.env
+.env.local
+.env.production
 

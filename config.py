@@ -108,6 +108,26 @@ _files = _cfg.get("files", {})
 CSV_FILE = _files.get("csv_file", str(BASE_DIR / "accounts.csv"))
 TEAM_TRACKER_FILE = _files.get("tracker_file", str(BASE_DIR / "team_tracker.json"))
 
+
+# ==================== 配置获取函数 ====================
+def get(key: str, default=None):
+    """
+    获取配置项的值
+    支持点号分隔的嵌套键，例如: "web.port" 或 "redemption.database_file"
+    """
+    keys = key.split(".")
+    value = _cfg
+
+    for k in keys:
+        if isinstance(value, dict):
+            value = value.get(k)
+            if value is None:
+                return default
+        else:
+            return default
+
+    return value if value is not None else default
+
 # ==================== 随机姓名列表 ====================
 FIRST_NAMES = [
     "James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph",
@@ -159,3 +179,32 @@ def get_team_by_email(email: str) -> dict:
 
 def get_team_by_org(org_id: str) -> dict:
     return next((t for t in TEAMS if t.get("account", {}).get("organizationId") == org_id), {})
+
+
+def reload_teams():
+    """重新加载 team.json 和 team_names 配置"""
+    global TEAMS, _raw_teams, _cfg
+
+    # 重新加载 team.json
+    _raw_teams = _load_teams()
+
+    # 重新加载 config.toml
+    _cfg = _load_toml()
+
+    # 重新构建 TEAMS
+    TEAMS.clear()
+    team_names = _cfg.get("files", {}).get("team_names", [])
+
+    for i, t in enumerate(_raw_teams):
+        # 优先使用 team_names 配置,否则使用邮箱前缀
+        team_name = team_names[i] if i < len(team_names) else t.get("user", {}).get("email", f"Team{i+1}").split("@")[0]
+
+        TEAMS.append({
+            "name": team_name,
+            "account_id": t.get("account", {}).get("id", ""),
+            "org_id": t.get("account", {}).get("organizationId", ""),
+            "auth_token": t.get("accessToken", ""),
+            "raw": t  # 保留原始数据
+        })
+
+    return len(TEAMS)

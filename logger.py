@@ -3,6 +3,16 @@
 
 from datetime import datetime
 import os
+import sys
+
+# 设置Windows控制台UTF-8编码
+if sys.platform == 'win32':
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleOutputCP(65001)  # UTF-8
+    except:
+        pass
 
 
 class Logger:
@@ -24,22 +34,22 @@ class Logger:
         "reset": "\033[0m"
     }
 
-    # 日志级别图标
+    # 日志级别图标 - Windows使用ASCII字符
     ICONS = {
-        "info": "ℹ️",
-        "success": "✅",
-        "warning": "⚠️",
-        "error": "❌",
-        "debug": "🔍",
-        "start": "🚀",
-        "browser": "🌐",
-        "email": "📧",
-        "code": "🔑",
-        "save": "💾",
-        "time": "⏱️",
-        "wait": "⏳",
-        "account": "👤",
-        "team": "👥",
+        "info": "[i]" if sys.platform == 'win32' else "ℹ️",
+        "success": "[OK]" if sys.platform == 'win32' else "✅",
+        "warning": "[!]" if sys.platform == 'win32' else "⚠️",
+        "error": "[X]" if sys.platform == 'win32' else "❌",
+        "debug": "[D]" if sys.platform == 'win32' else "🔍",
+        "start": "[*]" if sys.platform == 'win32' else "🚀",
+        "browser": "[B]" if sys.platform == 'win32' else "🌐",
+        "email": "[@]" if sys.platform == 'win32' else "📧",
+        "code": "[#]" if sys.platform == 'win32' else "🔑",
+        "save": "[S]" if sys.platform == 'win32' else "💾",
+        "time": "[T]" if sys.platform == 'win32' else "⏱️",
+        "wait": "[W]" if sys.platform == 'win32' else "⏳",
+        "account": "[U]" if sys.platform == 'win32' else "👤",
+        "team": "[G]" if sys.platform == 'win32' else "👥",
     }
 
     def __init__(self, name: str = "", use_color: bool = True, level: int = None):
@@ -76,18 +86,19 @@ class Logger:
 
     def info(self, msg: str, icon: str = None, indent: int = 0):
         if self.level <= self.LEVEL_INFO:
-            print(self._format("info", msg, icon, indent))
+            print(self._format("info", msg, icon, indent), flush=True)
 
     def success(self, msg: str, indent: int = 0):
         if self.level <= self.LEVEL_INFO:
-            print(self._format("success", msg, indent=indent))
+            print(self._format("success", msg, indent=indent), flush=True)
 
     def warning(self, msg: str, indent: int = 0):
         if self.level <= self.LEVEL_WARNING:
-            print(self._format("warning", msg, indent=indent))
+            print(self._format("warning", msg, indent=indent), flush=True)
 
     def error(self, msg: str, indent: int = 0):
-        print(self._format("error", msg, indent=indent))  # 错误总是显示
+        if self.level <= self.LEVEL_ERROR:
+            print(self._format("error", msg, indent=indent), flush=True)
 
     def debug(self, msg: str, indent: int = 0):
         if self.level <= self.LEVEL_DEBUG:
@@ -158,7 +169,8 @@ class Logger:
         if self.level <= self.LEVEL_INFO:
             self.separator()
             ts = self._timestamp()
-            print(f"[{ts}] 🎯 {title}")
+            target_icon = "[>]" if sys.platform == 'win32' else "🎯"
+            print(f"[{ts}] {target_icon} {title}")
             self.separator()
 
     def section(self, title: str):

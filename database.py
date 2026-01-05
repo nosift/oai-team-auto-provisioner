@@ -1,0 +1,432 @@
+"""
+SQLite数据库管理模块
+管理兑换码、兑换记录和Team统计
+"""
+
+import sqlite3
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any
+from contextlib import contextmanager
+from logger import log
+
+
+class Database:
+    """数据库管理类"""
+
+    def __init__(self, db_file: str = "redemption.db"):
+        self.db_file = db_file
+        self.init_database()
+
+    @contextmanager
+    def get_connection(self):
+        """获取数据库连接的上下文管理器"""
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row  # 允许通过列名访问
+        try:
+            yield conn
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            log.error(f"数据库操作失败: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def init_database(self):
+        """初始化数据库表"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # 创建兑换码表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS redemption_codes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code VARCHAR(32) UNIQUE NOT NULL,
+                    team_name VARCHAR(100) NOT NULL,
+                    max_uses INTEGER DEFAULT 1,
+                    used_count INTEGER DEFAULT 0,
+                    expires_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(20) DEFAULT 'active',
+                    notes TEXT
+                )
+            """)
+
+            # 创建兑换记录表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS redemptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code_id INTEGER NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    team_name VARCHAR(100) NOT NULL,
+                    redeemed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    invite_status VARCHAR(20) DEFAULT 'pending',
+                    error_message TEXT,
+                    ip_address VARCHAR(45),
+                    FOREIGN KEY (code_id) REFERENCES redemption_codes(id)
+                )
+            """)
+
+            # 创建Team统计表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS teams_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_name VARCHAR(100) UNIQUE NOT NULL,
+                    total_seats INTEGER DEFAULT 0,
+                    used_seats INTEGER DEFAULT 0,
+                    pending_invites INTEGER DEFAULT 0,
+                    available_seats INTEGER DEFAULT 0,
+                    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 创建索引
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_code ON redemption_codes(code)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_email ON redemptions(email)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_team ON redemption_codes(team_name)
+            """)
+
+            log.info("数据库初始化完成", icon="success")
+
+    # ==================== 兑换码管理 ====================
+
+    def create_code(
+        self,
+        code: str,
+        team_name: str,
+        max_uses: int = 1,
+        expires_at: Optional[datetime] = None,
+        notes: Optional[str] = None,
+    ) -> int:
+        """创建兑换码"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO redemption_codes (code, team_name, max_uses, expires_at, notes)
+                VALUES (?, ?, ?, ?, ?)
+            """,
+                (code, team_name, max_uses, expires_at, notes),
+            )
+            return cursor.lastrowid
+
+    def get_code(self, code: str) -> Optional[Dict[str, Any]]:
+        """获取兑换码信息"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM redemption_codes WHERE code = ?
+            """,
+                (code,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def verify_code(self, code: str) -> tuple[bool, str]:
+        """
+        验证兑换码是否有效
+        返回: (是否有效, 错误信息)
+        """
+        code_info = self.get_code(code)
+
+        if not code_info:
+            return False, "兑换码不存在"
+
+        if code_info["status"] != "active":
+            return False, f"兑换码状态异常: {code_info['status']}"
+
+        # 检查过期时间
+        if code_info["expires_at"]:
+            expires_at = datetime.fromisoformat(code_info["expires_at"])
+            if datetime.now() > expires_at:
+                # 自动标记为过期
+                self.update_code_status(code, "expired")
+                return False, "兑换码已过期"
+
+        # 检查使用次数
+        if code_info["used_count"] >= code_info["max_uses"]:
+            return False, "兑换码使用次数已达上限"
+
+        return True, "有效"
+
+    def update_code_status(self, code: str, status: str):
+        """更新兑换码状态"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE redemption_codes SET status = ? WHERE code = ?
+            """,
+                (status, code),
+            )
+
+    def increment_code_usage(self, code: str):
+        """增加兑换码使用次数"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE redemption_codes
+                SET used_count = used_count + 1
+                WHERE code = ?
+            """,
+                (code,),
+            )
+
+    def list_codes(
+        self, team_name: Optional[str] = None, status: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """列出兑换码"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            query = "SELECT * FROM redemption_codes WHERE 1=1"
+            params = []
+
+            if team_name:
+                query += " AND team_name = ?"
+                params.append(team_name)
+
+            if status:
+                query += " AND status = ?"
+                params.append(status)
+
+            query += " ORDER BY created_at DESC"
+
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+
+    # ==================== 兑换记录管理 ====================
+
+    def create_redemption(
+        self,
+        code_id: int,
+        email: str,
+        team_name: str,
+        ip_address: Optional[str] = None,
+    ) -> int:
+        """创建兑换记录"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO redemptions (code_id, email, team_name, ip_address)
+                VALUES (?, ?, ?, ?)
+            """,
+                (code_id, email, team_name, ip_address),
+            )
+            return cursor.lastrowid
+
+    def update_redemption_status(
+        self,
+        redemption_id: int,
+        status: str,
+        error_message: Optional[str] = None,
+    ):
+        """更新兑换状态"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE redemptions
+                SET invite_status = ?, error_message = ?
+                WHERE id = ?
+            """,
+                (status, error_message, redemption_id),
+            )
+
+    def check_email_redeemed(self, email: str) -> bool:
+        """检查邮箱是否已兑换过"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*) as count FROM redemptions
+                WHERE email = ? AND invite_status = 'success'
+            """,
+                (email,),
+            )
+            result = cursor.fetchone()
+            return result["count"] > 0
+
+    def count_ip_redemptions(self, ip_address: str, hours: int = 1) -> int:
+        """统计IP在指定小时内的兑换次数"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            time_threshold = datetime.now() - timedelta(hours=hours)
+            cursor.execute(
+                """
+                SELECT COUNT(*) as count FROM redemptions
+                WHERE ip_address = ? AND redeemed_at > ?
+            """,
+                (ip_address, time_threshold),
+            )
+            result = cursor.fetchone()
+            return result["count"]
+
+    def list_redemptions(
+        self, limit: int = 100, offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """列出兑换记录"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    r.*,
+                    rc.code,
+                    rc.team_name
+                FROM redemptions r
+                JOIN redemption_codes rc ON r.code_id = rc.id
+                ORDER BY r.redeemed_at DESC
+                LIMIT ? OFFSET ?
+            """,
+                (limit, offset),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    # ==================== Team统计管理 ====================
+
+    def update_team_stats(
+        self,
+        team_name: str,
+        total_seats: int,
+        used_seats: int,
+        pending_invites: int,
+    ):
+        """更新Team统计信息"""
+        available_seats = total_seats - used_seats - pending_invites
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO teams_stats (team_name, total_seats, used_seats, pending_invites, available_seats)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(team_name) DO UPDATE SET
+                    total_seats = ?,
+                    used_seats = ?,
+                    pending_invites = ?,
+                    available_seats = ?,
+                    last_updated = CURRENT_TIMESTAMP
+            """,
+                (
+                    team_name,
+                    total_seats,
+                    used_seats,
+                    pending_invites,
+                    available_seats,
+                    total_seats,
+                    used_seats,
+                    pending_invites,
+                    available_seats,
+                ),
+            )
+
+    def get_team_stats(self, team_name: str) -> Optional[Dict[str, Any]]:
+        """获取Team统计信息"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM teams_stats WHERE team_name = ?
+            """,
+                (team_name,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def list_team_stats(self) -> List[Dict[str, Any]]:
+        """列出所有Team统计"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM teams_stats ORDER BY team_name
+            """
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    # ==================== 统计查询 ====================
+
+    def get_dashboard_stats(self) -> Dict[str, Any]:
+        """获取仪表盘统计数据"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # 总兑换码数
+            cursor.execute("SELECT COUNT(*) as count FROM redemption_codes")
+            total_codes = cursor.fetchone()["count"]
+
+            # 激活的兑换码数
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM redemption_codes WHERE status = 'active'"
+            )
+            active_codes = cursor.fetchone()["count"]
+
+            # 总兑换次数
+            cursor.execute("SELECT COUNT(*) as count FROM redemptions")
+            total_redemptions = cursor.fetchone()["count"]
+
+            # 成功兑换次数
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM redemptions WHERE invite_status = 'success'"
+            )
+            successful_redemptions = cursor.fetchone()["count"]
+
+            # 今日兑换次数
+            cursor.execute(
+                """
+                SELECT COUNT(*) as count FROM redemptions
+                WHERE DATE(redeemed_at) = DATE('now')
+            """
+            )
+            today_redemptions = cursor.fetchone()["count"]
+
+            return {
+                "total_codes": total_codes,
+                "active_codes": active_codes,
+                "total_redemptions": total_redemptions,
+                "successful_redemptions": successful_redemptions,
+                "today_redemptions": today_redemptions,
+            }
+
+
+# 单例实例
+db = Database()
+
+
+if __name__ == "__main__":
+    # 测试数据库初始化
+    print("正在初始化数据库...")
+    test_db = Database("test_redemption.db")
+    print("✅ 数据库初始化成功！")
+
+    # 测试创建兑换码
+    print("\n测试创建兑换码...")
+    code_id = test_db.create_code(
+        code="TEST-DEMO-1234",
+        team_name="TestTeam",
+        max_uses=5,
+        expires_at=datetime.now() + timedelta(days=30),
+        notes="测试兑换码",
+    )
+    print(f"✅ 创建兑换码成功, ID: {code_id}")
+
+    # 测试验证兑换码
+    print("\n测试验证兑换码...")
+    valid, message = test_db.verify_code("TEST-DEMO-1234")
+    print(f"验证结果: {valid}, 信息: {message}")
+
+    # 测试获取统计
+    print("\n测试获取统计...")
+    stats = test_db.get_dashboard_stats()
+    print(f"统计数据: {stats}")
+
+    print("\n✅ 所有测试通过!")

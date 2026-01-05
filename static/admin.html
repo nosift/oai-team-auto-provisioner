@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>兑换码管理后台</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f7;
+            padding: 20px;
+        }
+
+        .header {
+            background: #ffffff;
+            padding: 24px 32px;
+            border-radius: 16px;
+            border: 1px solid #e5e5e5;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            color: #1d1d1f;
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .logout-btn {
+            padding: 10px 20px;
+            background: #000000;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .logout-btn:hover {
+            background: #1d1d1f;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #ffffff;
+            padding: 24px;
+            border-radius: 16px;
+            border: 1px solid #e5e5e5;
+        }
+
+        .stat-card h3 {
+            color: #86868b;
+            font-size: 13px;
+            margin-bottom: 8px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card .number {
+            color: #1d1d1f;
+            font-size: 36px;
+            font-weight: 600;
+            letter-spacing: -1px;
+        }
+
+        .tabs {
+            background: #ffffff;
+            border-radius: 16px;
+            border: 1px solid #e5e5e5;
+            overflow: hidden;
+        }
+
+        .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid #e5e5e5;
+            background: #fafafa;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 16px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            color: #86868b;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            background: #ffffff;
+            color: #1d1d1f;
+        }
+
+        .tab-btn:hover {
+            color: #1d1d1f;
+        }
+
+        .tab-content {
+            padding: 24px;
+        }
+
+        .tab-pane {
+            display: none;
+        }
+
+        .tab-pane.active {
+            display: block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        th {
+            background: #fafafa;
+            font-weight: 600;
+            color: #1d1d1f;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tr:hover {
+            background: #fafafa;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge.success {
+            background: #f0f9f4;
+            color: #1d4428;
+        }
+
+        .badge.warning {
+            background: #fff9f0;
+            color: #6e4a1e;
+        }
+
+        .badge.danger {
+            background: #fff0f0;
+            color: #6e1616;
+        }
+
+        .badge.info {
+            background: #f5f5f7;
+            color: #1d1d1f;
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .filter-bar select {
+            padding: 10px 14px;
+            border: 1px solid #d2d2d7;
+            border-radius: 10px;
+            font-size: 14px;
+            background: #fafafa;
+            color: #1d1d1f;
+            transition: all 0.2s ease;
+        }
+
+        .filter-bar select:focus {
+            outline: none;
+            border-color: #000000;
+            background: #ffffff;
+        }
+
+        .refresh-btn {
+            padding: 10px 20px;
+            background: #000000;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-left: auto;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .refresh-btn:hover {
+            background: #1d1d1f;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #86868b;
+            font-size: 15px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 6px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn.disable {
+            background: #f5f5f7;
+            color: #1d1d1f;
+            border: 1px solid #d2d2d7;
+        }
+
+        .action-btn.disable:hover {
+            background: #e5e5e5;
+        }
+
+        .action-btn.enable {
+            background: #000000;
+            color: white;
+        }
+
+        .action-btn.enable:hover {
+            background: #1d1d1f;
+        }
+
+        code {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 13px;
+            background: #f5f5f7;
+            padding: 3px 6px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>兑换码管理后台</h1>
+        <a href="/admin/logout" class="logout-btn">退出登录</a>
+    </div>
+
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+            <h3>总兑换码数</h3>
+            <div class="number" id="totalCodes">-</div>
+        </div>
+        <div class="stat-card">
+            <h3>激活的兑换码</h3>
+            <div class="number" id="activeCodes">-</div>
+        </div>
+        <div class="stat-card">
+            <h3>总兑换次数</h3>
+            <div class="number" id="totalRedemptions">-</div>
+        </div>
+        <div class="stat-card">
+            <h3>成功兑换次数</h3>
+            <div class="number" id="successfulRedemptions">-</div>
+        </div>
+        <div class="stat-card">
+            <h3>今日兑换次数</h3>
+            <div class="number" id="todayRedemptions">-</div>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab-buttons">
+            <button class="tab-btn active" onclick="switchTab('codes')">兑换码管理</button>
+            <button class="tab-btn" onclick="switchTab('redemptions')">兑换记录</button>
+            <button class="tab-btn" onclick="switchTab('teams')">Team统计</button>
+            <button class="tab-btn" onclick="switchTab('teamManagement')">Team管理</button>
+        </div>
+
+        <div class="tab-content">
+            <!-- 兑换码管理 -->
+            <div id="codes" class="tab-pane active">
+                <div class="filter-bar">
+                    <select id="teamFilter" onchange="loadCodes()">
+                        <option value="">所有Team</option>
+                    </select>
+                    <select id="statusFilter" onchange="loadCodes()">
+                        <option value="">所有状态</option>
+                        <option value="active">激活</option>
+                        <option value="disabled">禁用</option>
+                        <option value="expired">过期</option>
+                    </select>
+                    <button class="refresh-btn" onclick="loadCodes()">刷新</button>
+                </div>
+
+                <div id="codesTable">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <!-- 兑换记录 -->
+            <div id="redemptions" class="tab-pane">
+                <div class="filter-bar">
+                    <button class="refresh-btn" onclick="loadRedemptions()">刷新</button>
+                </div>
+
+                <div id="redemptionsTable">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <!-- Team统计 -->
+            <div id="teams" class="tab-pane">
+                <div class="filter-bar">
+                    <button class="refresh-btn" onclick="refreshTeamStats()">刷新统计</button>
+                    <button class="refresh-btn" onclick="loadTeamStats()">重新加载</button>
+                </div>
+
+                <div id="teamsTable">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <!-- Team管理 -->
+            <div id="teamManagement" class="tab-pane">
+                <div class="filter-bar">
+                    <button class="refresh-btn" onclick="addTeam()">添加Team</button>
+                    <button class="refresh-btn" onclick="loadTeamList()">刷新</button>
+                </div>
+
+                <div id="teamListTable">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Team 添加/编辑对话框 -->
+    <div id="teamModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 32px; border-radius: 16px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto;">
+            <h2 style="margin-bottom: 24px; color: #1d1d1f; font-size: 24px; font-weight: 600;" id="modalTitle">添加Team</h2>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">Team 名称</label>
+                <input type="text" id="teamName" placeholder="例如: wggzwnas" style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">邮箱</label>
+                <input type="email" id="teamEmail" placeholder="team@example.com" style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">User ID</label>
+                <input type="text" id="teamUserId" placeholder="user-xxxxxxxx" style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">Account ID</label>
+                <input type="text" id="teamAccountId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">Organization ID</label>
+                <input type="text" id="teamOrgId" placeholder="org-xxxxxxxx" style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">Access Token <span style="color: #86868b; font-weight: 400;">(可选，编辑时不填则不更新)</span></label>
+                <textarea id="teamAccessToken" rows="4" placeholder="eyJhbGci..." style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 13px; font-family: 'SF Mono', Monaco, monospace;"></textarea>
+                <div style="margin-top: 8px; font-size: 13px; color: #86868b;">
+                    提示: 访问 <a href="https://chatgpt.com/api/auth/session" target="_blank" style="color: #000;">https://chatgpt.com/api/auth/session</a> 获取 accessToken
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button onclick="closeTeamModal()" style="padding: 12px 24px; background: #f5f5f7; color: #1d1d1f; border: none; border-radius: 10px; cursor: pointer; font-weight: 500;">取消</button>
+                <button onclick="saveTeam()" style="padding: 12px 24px; background: #000000; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 500;">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 兑换码生成对话框 -->
+    <div id="generateCodesModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 32px; border-radius: 16px; width: 90%; max-width: 500px;">
+            <h2 style="margin-bottom: 24px; color: #1d1d1f; font-size: 24px; font-weight: 600;">生成兑换码</h2>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">Team</label>
+                <input type="text" id="genTeamName" readonly style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px; background: #f5f5f7;">
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">生成数量</label>
+                <input type="number" id="genCount" value="10" min="1" max="100" style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">最大使用次数</label>
+                <input type="number" id="genMaxUses" value="1" min="1" max="100" style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <label style="display: block; margin-bottom: 8px; color: #1d1d1f; font-weight: 500;">有效期(天) <span style="color: #86868b; font-weight: 400;">(留空表示永久)</span></label>
+                <input type="number" id="genExpiresDays" placeholder="留空表示永久有效" min="1" style="width: 100%; padding: 12px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px;">
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button onclick="closeGenerateCodesModal()" style="padding: 12px 24px; background: #f5f5f7; color: #1d1d1f; border: none; border-radius: 10px; cursor: pointer; font-weight: 500;">取消</button>
+                <button onclick="generateCodes()" style="padding: 12px 24px; background: #000000; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 500;">生成</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 切换标签页
+        function switchTab(tabName) {
+            // 更新按钮状态
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // 更新内容显示
+            document.querySelectorAll('.tab-pane').forEach(pane => {
+                pane.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+
+            // 加载对应数据
+            if (tabName === 'codes') loadCodes();
+            else if (tabName === 'redemptions') loadRedemptions();
+            else if (tabName === 'teams') loadTeamStats();
+            else if (tabName === 'teamManagement') loadTeamList();
+        }
+
+        // 加载统计数据
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/admin/stats');
+                const result = await response.json();
+
+                if (result.success) {
+                    const stats = result.data.dashboard;
+                    document.getElementById('totalCodes').textContent = stats.total_codes;
+                    document.getElementById('activeCodes').textContent = stats.active_codes;
+                    document.getElementById('totalRedemptions').textContent = stats.total_redemptions;
+                    document.getElementById('successfulRedemptions').textContent = stats.successful_redemptions;
+                    document.getElementById('todayRedemptions').textContent = stats.today_redemptions;
+                }
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
+        }
+
+        // 加载兑换码列表
+        async function loadCodes() {
+            const team = document.getElementById('teamFilter').value;
+            const status = document.getElementById('statusFilter').value;
+
+            let url = '/api/admin/codes?';
+            if (team) url += `team=${team}&`;
+            if (status) url += `status=${status}`;
+
+            try {
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (result.success) {
+                    const codes = result.data;
+                    let html = '<table><thead><tr><th>兑换码</th><th>Team</th><th>使用情况</th><th>状态</th><th>过期时间</th><th>操作</th></tr></thead><tbody>';
+
+                    codes.forEach(code => {
+                        const statusBadge = code.status === 'active' ? 'success' : code.status === 'expired' ? 'danger' : 'warning';
+                        const expires = code.expires_at || '永久有效';
+
+                        html += `
+                            <tr>
+                                <td><code>${code.code}</code></td>
+                                <td>${code.team_name}</td>
+                                <td>${code.used_count}/${code.max_uses}</td>
+                                <td><span class="badge ${statusBadge}">${code.status}</span></td>
+                                <td>${expires}</td>
+                                <td>
+                                    ${code.status === 'active' ?
+                                        `<button class="action-btn disable" onclick="updateCodeStatus('${code.code}', 'disabled')">禁用</button>` :
+                                        `<button class="action-btn enable" onclick="updateCodeStatus('${code.code}', 'active')">启用</button>`
+                                    }
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    html += '</tbody></table>';
+                    document.getElementById('codesTable').innerHTML = html;
+                }
+            } catch (error) {
+                console.error('加载兑换码失败:', error);
+                document.getElementById('codesTable').innerHTML = '<div class="loading">加载失败</div>';
+            }
+        }
+
+        // 加载兑换记录
+        async function loadRedemptions() {
+            try {
+                const response = await fetch('/api/admin/redemptions?limit=50');
+                const result = await response.json();
+
+                if (result.success) {
+                    const redemptions = result.data;
+                    let html = '<table><thead><tr><th>邮箱</th><th>兑换码</th><th>Team</th><th>状态</th><th>兑换时间</th><th>IP地址</th></tr></thead><tbody>';
+
+                    redemptions.forEach(r => {
+                        const statusBadge = r.invite_status === 'success' ? 'success' : r.invite_status === 'failed' ? 'danger' : 'warning';
+                        const time = new Date(r.redeemed_at).toLocaleString();
+
+                        html += `
+                            <tr>
+                                <td>${r.email}</td>
+                                <td><code>${r.code}</code></td>
+                                <td>${r.team_name}</td>
+                                <td><span class="badge ${statusBadge}">${r.invite_status}</span></td>
+                                <td>${time}</td>
+                                <td>${r.ip_address || '-'}</td>
+                            </tr>
+                        `;
+                    });
+
+                    html += '</tbody></table>';
+                    document.getElementById('redemptionsTable').innerHTML = html;
+                }
+            } catch (error) {
+                console.error('加载兑换记录失败:', error);
+                document.getElementById('redemptionsTable').innerHTML = '<div class="loading">加载失败</div>';
+            }
+        }
+
+        // 加载Team统计
+        async function loadTeamStats() {
+            try {
+                const response = await fetch('/api/admin/stats');
+                const result = await response.json();
+
+                if (result.success) {
+                    const teams = result.data.teams;
+                    let html = '<table><thead><tr><th>Team</th><th>总席位</th><th>已使用</th><th>待接受</th><th>可用席位</th><th>最后更新</th></tr></thead><tbody>';
+
+                    teams.forEach(team => {
+                        const time = new Date(team.last_updated).toLocaleString();
+
+                        html += `
+                            <tr>
+                                <td><strong>${team.team_name}</strong></td>
+                                <td>${team.total_seats}</td>
+                                <td>${team.used_seats}</td>
+                                <td>${team.pending_invites}</td>
+                                <td><strong>${team.available_seats}</strong></td>
+                                <td>${time}</td>
+                            </tr>
+                        `;
+                    });
+
+                    html += '</tbody></table>';
+                    document.getElementById('teamsTable').innerHTML = html;
+                }
+            } catch (error) {
+                console.error('加载Team统计失败:', error);
+                document.getElementById('teamsTable').innerHTML = '<div class="loading">加载失败</div>';
+            }
+        }
+
+        // 刷新Team统计（从ChatGPT API获取最新数据）
+        async function refreshTeamStats() {
+            const teamsTable = document.getElementById('teamsTable');
+            teamsTable.innerHTML = '<div class="loading">正在从ChatGPT API刷新统计...</div>';
+
+            try {
+                const response = await fetch('/api/admin/teams/refresh-stats', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(`刷新成功！\n\n${result.message}`);
+                    // 刷新完成后重新加载显示
+                    loadTeamStats();
+                } else {
+                    alert('刷新失败: ' + result.error);
+                    loadTeamStats();
+                }
+            } catch (error) {
+                alert('刷新失败: ' + error.message);
+                loadTeamStats();
+            }
+        }
+
+        // 更新兑换码状态
+        async function updateCodeStatus(code, status) {
+            if (!confirm(`确定要${status === 'active' ? '启用' : '禁用'}此兑换码吗?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/codes/${code}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('更新成功');
+                    loadCodes();
+                } else {
+                    alert('更新失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('更新失败: ' + error.message);
+            }
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', function() {
+            loadStats();
+            loadTeamFilterOptions(); // 加载Team筛选选项
+            loadCodes();
+
+            // 每30秒自动刷新统计
+            setInterval(loadStats, 30000);
+        });
+
+        // 加载Team筛选选项
+        async function loadTeamFilterOptions() {
+            try {
+                const response = await fetch('/api/admin/teams');
+                const result = await response.json();
+
+                if (result.success) {
+                    const teamFilter = document.getElementById('teamFilter');
+                    const teams = result.data;
+
+                    // 清空现有选项(除了"所有Team")
+                    teamFilter.innerHTML = '<option value="">所有Team</option>';
+
+                    // 添加每个Team作为选项
+                    teams.forEach(team => {
+                        const option = document.createElement('option');
+                        option.value = team.name;
+                        option.textContent = team.name;
+                        teamFilter.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('加载Team列表失败:', error);
+            }
+        }
+
+        // ==================== Team 管理功能 ====================
+
+        let currentEditingTeamIndex = null;
+
+        // 加载 Team 列表
+        async function loadTeamList() {
+            try {
+                const response = await fetch('/api/admin/teams');
+                const result = await response.json();
+
+                if (result.success) {
+                    const teams = result.data;
+                    let html = '<table><thead><tr><th>Team名称</th><th>邮箱</th><th>Account ID</th><th>Token状态</th><th>操作</th></tr></thead><tbody>';
+
+                    teams.forEach(team => {
+                        const tokenBadge = team.has_token ?
+                            '<span class="badge success">已配置</span>' :
+                            '<span class="badge warning">未配置</span>';
+
+                        html += `
+                            <tr>
+                                <td><strong>${team.name}</strong></td>
+                                <td>${team.email}</td>
+                                <td><code>${team.account_id.substring(0, 16)}...</code></td>
+                                <td>${tokenBadge}</td>
+                                <td>
+                                    <button class="action-btn enable" onclick="editTeam(${team.index})">编辑</button>
+                                    <button class="action-btn enable" onclick="showGenerateCodesModal(${team.index}, '${team.name}')">生成兑换码</button>
+                                    <button class="action-btn disable" onclick="deleteTeam(${team.index}, '${team.name}')">删除</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    html += '</tbody></table>';
+                    document.getElementById('teamListTable').innerHTML = html;
+                }
+            } catch (error) {
+                console.error('加载Team列表失败:', error);
+                document.getElementById('teamListTable').innerHTML = '<div class="loading">加载失败</div>';
+            }
+        }
+
+        // 添加新 Team
+        function addTeam() {
+            currentEditingTeamIndex = null;
+            document.getElementById('modalTitle').textContent = '添加Team';
+            document.getElementById('teamName').value = '';
+            document.getElementById('teamEmail').value = '';
+            document.getElementById('teamUserId').value = '';
+            document.getElementById('teamAccountId').value = '';
+            document.getElementById('teamOrgId').value = '';
+            document.getElementById('teamAccessToken').value = '';
+            document.getElementById('teamModal').style.display = 'flex';
+        }
+
+        // 编辑 Team
+        async function editTeam(index) {
+            currentEditingTeamIndex = index;
+            document.getElementById('modalTitle').textContent = '编辑Team';
+
+            try {
+                const response = await fetch('/api/admin/teams');
+                const result = await response.json();
+
+                if (result.success) {
+                    const team = result.data[index];
+                    document.getElementById('teamName').value = team.name;
+                    document.getElementById('teamEmail').value = team.email;
+                    document.getElementById('teamUserId').value = team.user_id;
+                    document.getElementById('teamAccountId').value = team.account_id;
+                    document.getElementById('teamOrgId').value = team.org_id;
+                    document.getElementById('teamAccessToken').value = ''; // 不显示已有token
+                    document.getElementById('teamModal').style.display = 'flex';
+                }
+            } catch (error) {
+                alert('加载Team信息失败: ' + error.message);
+            }
+        }
+
+        // 保存 Team
+        async function saveTeam() {
+            const name = document.getElementById('teamName').value.trim();
+            const email = document.getElementById('teamEmail').value.trim();
+            const userId = document.getElementById('teamUserId').value.trim();
+            const accountId = document.getElementById('teamAccountId').value.trim();
+            const orgId = document.getElementById('teamOrgId').value.trim();
+            const accessToken = document.getElementById('teamAccessToken').value.trim();
+
+            if (!name || !email || !userId || !accountId || !orgId) {
+                alert('请填写所有必填字段');
+                return;
+            }
+
+            // 添加新Team时必须提供token
+            if (currentEditingTeamIndex === null && !accessToken) {
+                alert('添加新Team时必须提供Access Token');
+                return;
+            }
+
+            const payload = { name, email, user_id: userId, account_id: accountId, org_id: orgId };
+            if (accessToken) {
+                payload.access_token = accessToken;
+            }
+
+            try {
+                let response;
+                if (currentEditingTeamIndex === null) {
+                    // 添加新Team
+                    response = await fetch('/api/admin/teams', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    // 更新现有Team
+                    response = await fetch(`/api/admin/teams/${currentEditingTeamIndex}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    closeTeamModal();
+                    loadTeamList();
+                    loadTeamFilterOptions(); // 刷新Team筛选选项
+                } else {
+                    alert('保存失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('保存失败: ' + error.message);
+            }
+        }
+
+        // 删除 Team
+        async function deleteTeam(index, name) {
+            if (!confirm(`确定要删除Team "${name}" 吗？\n\n此操作不可恢复！`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/teams/${index}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    loadTeamList();
+                    loadTeamFilterOptions(); // 刷新Team筛选选项
+                } else {
+                    alert('删除失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        }
+
+        // 关闭 Team 对话框
+        function closeTeamModal() {
+            document.getElementById('teamModal').style.display = 'none';
+            currentEditingTeamIndex = null;
+        }
+
+        // 显示生成兑换码对话框
+        function showGenerateCodesModal(index, teamName) {
+            currentEditingTeamIndex = index;
+            document.getElementById('genTeamName').value = teamName;
+            document.getElementById('genCount').value = 10;
+            document.getElementById('genMaxUses').value = 1;
+            document.getElementById('genExpiresDays').value = '';
+            document.getElementById('generateCodesModal').style.display = 'flex';
+        }
+
+        // 生成兑换码
+        async function generateCodes() {
+            const count = parseInt(document.getElementById('genCount').value);
+            const maxUses = parseInt(document.getElementById('genMaxUses').value);
+            const expiresDaysInput = document.getElementById('genExpiresDays').value;
+            const expiresDays = expiresDaysInput ? parseInt(expiresDaysInput) : null;
+
+            if (!count || count < 1 || count > 100) {
+                alert('生成数量必须在 1-100 之间');
+                return;
+            }
+
+            if (!maxUses || maxUses < 1) {
+                alert('最大使用次数必须大于 0');
+                return;
+            }
+
+            const payload = { count, max_uses: maxUses };
+            if (expiresDays) {
+                payload.expires_days = expiresDays;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/teams/${currentEditingTeamIndex}/generate-codes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const codes = result.data.codes;
+                    const codesText = codes.join('\n');
+
+                    // 创建文本区域用于复制
+                    const textarea = document.createElement('textarea');
+                    textarea.value = codesText;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+
+                    alert(`成功生成 ${codes.length} 个兑换码！\n\n兑换码已复制到剪贴板。\n\n${codesText}`);
+                    closeGenerateCodesModal();
+                    loadCodes(); // 刷新兑换码列表
+                } else {
+                    alert('生成失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('生成失败: ' + error.message);
+            }
+        }
+
+        // 关闭生成兑换码对话框
+        function closeGenerateCodesModal() {
+            document.getElementById('generateCodesModal').style.display = 'none';
+            currentEditingTeamIndex = null;
+        }
+    </script>
+</body>
+</html>

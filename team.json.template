@@ -1,0 +1,13 @@
+[
+  {
+    "user": {
+      "id": "在这里填入你的user id",
+      "email": "在这里填入你的邮箱地址"
+    },
+    "account": {
+      "id": "在这里填入你的account id",
+      "organizationId": "在这里填入你的organizationId"
+    },
+    "accessToken": "在这里填入你的accessToken（很长一串）"
+  }
+]

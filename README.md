@@ -338,6 +338,194 @@ tracker_file = "team_tracker.json"
 
 ---
 
+## 🎁 兑换码系统 (新增功能)
+
+除了原有的自动化批量注册功能，本项目还提供了一个**基于Web的兑换码系统**，允许用户通过输入邮箱和兑换码来兑换ChatGPT Team席位。
+
+### ✨ 兑换系统特性
+
+- 🎟️ **兑换码管理** - 批量生成、启用/禁用、设置有效期和使用次数
+- 🌐 **Web兑换界面** - 用户友好的兑换页面，输入邮箱+兑换码即可
+- 🔧 **管理后台** - 实时查看兑换记录、统计数据、Team席位状态
+- 🛡️ **安全防护** - IP限流、邮箱唯一性检查、兑换码验证
+- 💾 **SQLite数据库** - 轻量级数据存储，无需额外部署
+- 📊 **多Team支持** - 支持多个Team的席位管理
+
+### 🚀 快速开始(兑换系统)
+
+> 💡 **第一次使用？** 查看 [本地启动完整指南](START_HERE.md) 或 [详细步骤说明](SETUP_STEP_BY_STEP.md)
+
+#### 1. 安装额外依赖
+
+```bash
+pip install flask gunicorn
+```
+
+#### 2. 配置Team凭证
+
+创建 `team.json` (访问 https://chatgpt.com/api/auth/session 获取):
+
+```json
+[{
+    "user": {"id": "user-xxx", "email": "your@email.com"},
+    "account": {"id": "account-xxx", "organizationId": "org-xxx"},
+    "accessToken": "eyJhbGci..."
+}]
+```
+
+创建 `config.toml`:
+```bash
+cp config.toml.example config.toml
+# 编辑config.toml，修改admin_password
+```
+
+#### 3. 生成兑换码
+
+```bash
+# 生成10个兑换码，绑定到TeamA
+python code_generator.py generate --team TeamA --count 10
+
+# 生成100个兑换码，每个码可用5次，有效期30天
+python code_generator.py generate --team TeamA --count 100 --max-uses 5 --valid-days 30
+
+# 导出到CSV文件
+python code_generator.py generate --team TeamA --count 50 --export codes.csv
+```
+
+#### 4. 启动Web服务
+
+**方式1: Python直接运行**
+```bash
+# 使用快速启动脚本(推荐)
+python start_redemption.py
+
+# 或直接启动Web服务
+python web_server.py
+```
+
+**方式2: Docker容器部署 (推荐生产环境)**
+```bash
+# Linux/macOS
+chmod +x start.sh
+./start.sh
+
+# Windows
+start.bat
+
+# 或使用Docker Compose
+docker-compose up -d
+```
+
+#### 5. 访问系统
+
+- 📝 **用户兑换页面**: http://localhost:5000/
+- 🔧 **管理后台**: http://localhost:5000/admin (密码在config.toml中配置)
+
+### 🐳 Docker部署 (生产环境推荐)
+
+#### 快速开始
+
+```bash
+# 1. 准备配置
+cp config.toml.example config.toml
+nano config.toml team.json
+
+# 2. 启动服务
+docker-compose up -d
+
+# 3. 查看日志
+docker-compose logs -f
+```
+
+#### Docker命令
+
+```bash
+# 构建镜像
+./build.sh  # Linux/macOS
+build.bat   # Windows
+
+# 启动服务
+docker-compose up -d
+
+# 停止服务
+docker-compose down
+
+# 查看状态
+docker-compose ps
+
+# 备份数据
+docker cp chatgpt-team-redemption:/app/data/redemption.db ./backup/
+```
+
+#### 详细文档
+
+- **Docker部署指南**: [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) - 完整Docker部署文档
+
+### 📚 详细文档
+
+- **使用指南**: [REDEMPTION_GUIDE.md](REDEMPTION_GUIDE.md) - 完整的使用教程
+- **设计文档**: [REDEMPTION_SYSTEM_DESIGN.md](REDEMPTION_SYSTEM_DESIGN.md) - 系统架构设计
+
+### 🔧 兑换码管理命令
+
+```bash
+# 查看所有兑换码
+python code_generator.py list
+
+# 按Team筛选
+python code_generator.py list --team TeamA
+
+# 按状态筛选
+python code_generator.py list --status active
+
+# 禁用兑换码
+python code_generator.py disable TEAM-ABCD-1234-EFGH
+
+# 启用兑换码
+python code_generator.py enable TEAM-ABCD-1234-EFGH
+
+# 查看统计信息
+python code_generator.py stats
+```
+
+### 📊 兑换系统架构
+
+```
+用户浏览器
+    ↓
+Flask Web服务 (兑换API + 管理后台)
+    ↓
+SQLite数据库 (兑换码 + 兑换记录)
+    ↓
+Team Service (邀请用户到Team)
+```
+
+### 🔐 安全配置
+
+在 `config.toml` 中配置:
+
+```toml
+[redemption]
+database_file = "redemption.db"
+rate_limit_per_hour = 10      # IP限流
+enable_ip_check = true
+
+[web]
+host = "0.0.0.0"
+port = 5000
+admin_password = "your-secure-password"  # 请务必修改!
+enable_admin = true
+```
+
+### 🎯 使用场景
+
+1. **活动推广** - 生成一次性兑换码用于营销活动
+2. **团队分发** - 批量生成多次使用的兑换码给团队成员
+3. **限时优惠** - 设置过期时间的限时兑换码
+4. **多Team管理** - 同时管理多个ChatGPT Team的席位分配
+
+---
+
 ## 📄 License
 
 [MIT](LICENSE)
