@@ -87,18 +87,18 @@ GUNICORN_TIMEOUT=120
 LOG_LEVEL=INFO
 ```
 
-**4. 配置文件挂载**
+**4. 配置注入（推荐）**
 
-⚠️ **重要**: Zeabur不支持直接挂载本地文件，需要将配置文件提交到Git仓库：
+Zeabur 不支持挂载本地文件，建议使用环境变量/Secrets 注入敏感配置（无需把 `config.toml`/`team.json` 提交到仓库）：
 
-```bash
-# 将配置文件添加到仓库
-git add config.toml team.json
-git commit -m "Add config files"
-git push
 ```
+ADMIN_PASSWORD=your-secure-password
+TEAM_JSON_B64=<base64(team.json)>
 
-> 注意：如果不想公开配置文件，建议使用私有仓库
+# 可选
+ENABLE_ADMIN=true
+REDEMPTION_DATABASE_FILE=/app/data/redemption.db
+```
 
 **5. 部署完成**
 
@@ -302,6 +302,11 @@ HEALTHCHECK CMD python -c "import urllib.request; ..."
 | `GUNICORN_TIMEOUT` | 120 | 请求超时时间(秒) | 120 |
 | `LOG_LEVEL` | INFO | 日志级别 | INFO |
 | `PORT` | 5000 | 监听端口 | 平台自动分配 |
+| `ADMIN_PASSWORD` | - | 管理后台密码 | 必填 |
+| `TEAM_JSON_B64` | - | Team 凭证（team.json 的 base64） | 必填 |
+| `TEAM_JSON` | - | Team 凭证（原始 JSON，可能需转义） | 可选 |
+| `REDEMPTION_DATABASE_FILE` | redemption.db | SQLite 路径 | /app/data/redemption.db |
+| `ENABLE_ADMIN` | true | 是否启用后台 | true |
 
 ### 资源占用估算
 
@@ -313,37 +318,13 @@ HEALTHCHECK CMD python -c "import urllib.request; ..."
 
 ## 🔧 配置文件管理
 
-### 方法1: 提交到私有仓库 (推荐)
+### 方法1: 使用环境变量/Secrets（推荐）
 
-```bash
-# 使用私有GitHub仓库
-git add config.toml team.json
-git commit -m "Add config files"
-git push
-```
+项目已内置支持从环境变量读取 `ADMIN_PASSWORD` / `TEAM_JSON(_B64)`，更适合 Zeabur/Railway 等云平台。
 
-优点：
-- ✅ 简单直接
-- ✅ 自动同步
-- ✅ 版本控制
+### 方法2: 提交到私有仓库（不推荐）
 
-缺点：
-- ⚠️ 需要私有仓库
-- ⚠️ 配置在代码仓库中
-
-### 方法2: 使用环境变量覆盖
-
-修改应用代码读取环境变量：
-
-```python
-import os
-admin_password = os.getenv("ADMIN_PASSWORD", config.get("web.admin_password"))
-```
-
-在平台设置环境变量：
-```
-ADMIN_PASSWORD=your-secure-password
-```
+如果你坚持使用文件方式，请确保 `config.toml` / `team.json` 会进入镜像构建上下文（检查 `.dockerignore`），并务必使用私有仓库。
 
 ### 方法3: 使用平台Secret管理 (高级)
 

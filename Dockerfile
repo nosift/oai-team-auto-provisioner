@@ -53,9 +53,10 @@ USER appuser
 # 暴露端口
 EXPOSE 5000
 
-# 健康检查 (优化为不依赖requests库)
+# 健康检查 (优化为不依赖requests库，支持动态端口)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)" || exit 1
+    CMD python -c "import urllib.request, os; port = os.getenv('PORT', '5000'); urllib.request.urlopen(f'http://localhost:{port}/health', timeout=5)" || exit 1
 
-# 启动命令 (使用环境变量控制workers数量,适应不同平台)
-CMD gunicorn --workers ${GUNICORN_WORKERS} --bind 0.0.0.0:5000 --timeout ${GUNICORN_TIMEOUT} --access-logfile - --error-logfile - web_server:app
+# 启动命令 (使用环境变量控制workers数量和端口,适应不同平台)
+# Zeabur/Railway等平台会自动设置PORT环境变量
+CMD gunicorn --workers ${GUNICORN_WORKERS} --bind 0.0.0.0:${PORT:-5000} --timeout ${GUNICORN_TIMEOUT} --access-logfile - --error-logfile - web_server:app

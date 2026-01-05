@@ -1,5 +1,7 @@
 # ==================== 配置模块 ====================
+import base64
 import json
+import os
 import random
 import re
 import string
@@ -19,7 +21,49 @@ CONFIG_FILE = BASE_DIR / "config.toml"
 TEAM_JSON_FILE = BASE_DIR / "team.json"
 
 
+def _env_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _decode_env_b64(var_name: str) -> str | None:
+    raw = os.getenv(var_name)
+    if not raw:
+        return None
+    try:
+        return base64.b64decode(raw).decode("utf-8")
+    except Exception:
+        return None
+
+
+def _load_toml_from_env() -> dict:
+    if tomllib is None:
+        return {}
+
+    raw = _decode_env_b64("CONFIG_TOML_B64") or _decode_env_b64("CONFIG_TOML_BASE64")
+    if raw is None:
+        raw = os.getenv("CONFIG_TOML")
+
+    if not raw:
+        return {}
+
+    try:
+        return tomllib.loads(raw)
+    except Exception:
+        return {}
+
+
 def _load_toml() -> dict:
+    env_cfg = _load_toml_from_env()
+    if env_cfg:
+        return env_cfg
+
     if not CONFIG_FILE.exists() or tomllib is None:
         return {}
     try:
@@ -29,7 +73,63 @@ def _load_toml() -> dict:
         return {}
 
 
+def _load_teams_from_env_indexed() -> list:
+    teams = []
+    for idx in range(0, 100):
+        token = (
+            os.getenv(f"TEAM_{idx}_TOKEN")
+            or os.getenv(f"TEAM_{idx}_AUTH_TOKEN")
+            or os.getenv(f"TEAM_{idx}_ACCESS_TOKEN")
+        )
+        account_id = os.getenv(f"TEAM_{idx}_ACCOUNT_ID")
+        org_id = os.getenv(f"TEAM_{idx}_ORG_ID") or os.getenv(f"TEAM_{idx}_ORGANIZATION_ID")
+
+        if not token and not account_id and not org_id:
+            break
+
+        if not token or not account_id:
+            continue
+
+        name = os.getenv(f"TEAM_{idx}_NAME") or f"Team{idx+1}"
+        email = os.getenv(f"TEAM_{idx}_EMAIL") or f"{name}@example.com"
+        user_id = os.getenv(f"TEAM_{idx}_USER_ID") or ""
+
+        teams.append(
+            {
+                "user": {"id": user_id, "email": email},
+                "account": {"id": account_id, "organizationId": org_id or ""},
+                "accessToken": token,
+            }
+        )
+
+    return teams
+
+
+def _load_teams_from_env_json() -> list:
+    raw = _decode_env_b64("TEAM_JSON_B64") or _decode_env_b64("TEAM_JSON_BASE64")
+    if raw is None:
+        raw = os.getenv("TEAM_JSON")
+
+    if not raw:
+        return []
+
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, list) else [data]
+    except Exception:
+        return []
+
+
 def _load_teams() -> list:
+    # 适用于 Zeabur/Railway 等无法挂载文件的平台：从环境变量注入 Team 凭证
+    env_json = _load_teams_from_env_json()
+    if env_json:
+        return env_json
+
+    env_indexed = _load_teams_from_env_indexed()
+    if env_indexed:
+        return env_indexed
+
     if not TEAM_JSON_FILE.exists():
         return []
     try:
@@ -46,14 +146,19 @@ _raw_teams = _load_teams()
 
 # 转换 team.json 格式为 team_service.py 期望的格式
 TEAMS = []
+_team_names = (_cfg.get("files", {}) or {}).get("team_names", []) or []
 for i, t in enumerate(_raw_teams):
-    TEAMS.append({
-        "name": t.get("user", {}).get("email", f"Team{i+1}").split("@")[0],
-        "account_id": t.get("account", {}).get("id", ""),
-        "org_id": t.get("account", {}).get("organizationId", ""),
-        "auth_token": t.get("accessToken", ""),
-        "raw": t  # 保留原始数据
-    })
+    default_name = t.get("user", {}).get("email", f"Team{i+1}").split("@")[0]
+    name = _team_names[i] if i < len(_team_names) and _team_names[i] else default_name
+    TEAMS.append(
+        {
+            "name": name,
+            "account_id": t.get("account", {}).get("id", ""),
+            "org_id": t.get("account", {}).get("organizationId", ""),
+            "auth_token": t.get("accessToken", ""),
+            "raw": t,  # 保留原始数据
+        }
+    )
 
 # 邮箱
 _email = _cfg.get("email", {})
@@ -115,6 +220,23 @@ def get(key: str, default=None):
     获取配置项的值
     支持点号分隔的嵌套键，例如: "web.port" 或 "redemption.database_file"
     """
+    # 环境变量优先（便于云平台通过 Secrets 注入）
+    if key == "web.admin_password":
+        env_value = os.getenv("ADMIN_PASSWORD") or os.getenv("WEB_ADMIN_PASSWORD")
+        if env_value:
+            return env_value
+
+    if key == "web.enable_admin":
+        env_value = os.getenv("ENABLE_ADMIN") or os.getenv("WEB_ENABLE_ADMIN")
+        parsed = _env_bool(env_value)
+        if parsed is not None:
+            return parsed
+
+    if key == "redemption.database_file":
+        env_value = os.getenv("REDEMPTION_DATABASE_FILE") or os.getenv("DATABASE_FILE")
+        if env_value:
+            return env_value
+
     keys = key.split(".")
     value = _cfg
 

@@ -7,13 +7,28 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
+from pathlib import Path
 from logger import log
 
 
 class Database:
     """数据库管理类"""
 
-    def __init__(self, db_file: str = "redemption.db"):
+    def __init__(self, db_file: str | None = None):
+        if db_file is None:
+            import config
+
+            db_file = config.get("redemption.database_file", "redemption.db")
+
+        if db_file != ":memory:":
+            try:
+                db_path = Path(db_file)
+                if db_path.parent != Path("."):
+                    db_path.parent.mkdir(parents=True, exist_ok=True)
+                db_file = str(db_path)
+            except Exception:
+                pass
+
         self.db_file = db_file
         self.init_database()
 
