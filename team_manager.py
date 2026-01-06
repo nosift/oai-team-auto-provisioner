@@ -7,14 +7,15 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from logger import log
+import config
 
 
 class TeamManager:
     """Team 管理类"""
 
-    def __init__(self, team_file: str = "team.json", config_file: str = "config.toml"):
-        self.team_file = Path(team_file)
-        self.config_file = Path(config_file)
+    def __init__(self, team_file: str | None = None, config_file: str | None = None):
+        self.team_file = Path(team_file) if team_file else Path(config.TEAM_JSON_FILE)
+        self.config_file = Path(config_file) if config_file else Path(config.CONFIG_FILE)
 
     def load_teams(self) -> List[Dict[str, Any]]:
         """加载所有 Team"""
@@ -32,6 +33,7 @@ class TeamManager:
     def save_teams(self, teams: List[Dict[str, Any]], team_names: Optional[List[str]] = None) -> bool:
         """保存所有 Team"""
         try:
+            self.team_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self.team_file, "w", encoding="utf-8") as f:
                 json.dump(teams, f, ensure_ascii=False, indent=2)
 
@@ -195,13 +197,15 @@ class TeamManager:
 
     def _update_config_team_names(self, teams: List[Dict[str, Any]], team_names: Optional[List[str]] = None):
         """更新 config.toml 中的 team_names"""
-        if not self.config_file.exists():
-            return
+        self.config_file.parent.mkdir(parents=True, exist_ok=True)
 
         try:
             # 读取现有配置
-            with open(self.config_file, "r", encoding="utf-8") as f:
-                content = f.read()
+            if self.config_file.exists():
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+            else:
+                content = ""
 
             desired_names = list(team_names) if team_names is not None else self._load_team_names()
             if len(desired_names) > len(teams):

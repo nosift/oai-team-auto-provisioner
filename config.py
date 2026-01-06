@@ -17,8 +17,31 @@ except ImportError:
 
 # ==================== 路径 ====================
 BASE_DIR = Path(__file__).parent
-CONFIG_FILE = BASE_DIR / "config.toml"
-TEAM_JSON_FILE = BASE_DIR / "team.json"
+
+
+def _default_data_dir() -> Path:
+    """
+    数据目录（用于持久化）：
+    - 优先使用环境变量 DATA_DIR / APP_DATA_DIR
+    - 容器环境默认使用 /app/data（Dockerfile 已创建该目录，Zeabur 可挂载持久化存储到此目录）
+    - 否则回退到项目目录
+    """
+    env_dir = os.getenv("DATA_DIR") or os.getenv("APP_DATA_DIR")
+    if env_dir:
+        return Path(env_dir)
+
+    candidate = Path("/app/data")
+    if candidate.exists():
+        return candidate
+
+    return BASE_DIR
+
+
+DATA_DIR = _default_data_dir()
+CONFIG_FILE = DATA_DIR / "config.toml"
+TEAM_JSON_FILE = DATA_DIR / "team.json"
+FALLBACK_CONFIG_FILE = BASE_DIR / "config.toml"
+FALLBACK_TEAM_JSON_FILE = BASE_DIR / "team.json"
 
 
 def _env_bool(value: str | None) -> bool | None:
@@ -64,10 +87,14 @@ def _load_toml() -> dict:
     if env_cfg:
         return env_cfg
 
-    if not CONFIG_FILE.exists() or tomllib is None:
+    if tomllib is None:
+        return {}
+
+    file_path = CONFIG_FILE if CONFIG_FILE.exists() else FALLBACK_CONFIG_FILE
+    if not file_path.exists():
         return {}
     try:
-        with open(CONFIG_FILE, "rb") as f:
+        with open(file_path, "rb") as f:
             return tomllib.load(f)
     except Exception:
         return {}
@@ -130,10 +157,11 @@ def _load_teams() -> list:
     if env_indexed:
         return env_indexed
 
-    if not TEAM_JSON_FILE.exists():
+    file_path = TEAM_JSON_FILE if TEAM_JSON_FILE.exists() else FALLBACK_TEAM_JSON_FILE
+    if not file_path.exists():
         return []
     try:
-        with open(TEAM_JSON_FILE, "r", encoding="utf-8") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data if isinstance(data, list) else [data]
     except Exception:
