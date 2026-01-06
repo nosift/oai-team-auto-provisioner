@@ -1007,13 +1007,28 @@
                 const codes = result.data.codes;
                 const codesText = codes.join('\n');
 
-                    // 创建文本区域用于复制
-                    const textarea = document.createElement('textarea');
-                    textarea.value = codesText;
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(textarea);
+                // 复制到剪贴板
+                try {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        await navigator.clipboard.writeText(codesText);
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = codesText;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textarea);
+                    }
+                } catch (e) {
+                    // 忽略复制失败：仍然把兑换码展示给用户
+                }
+
+                alert(`成功生成 ${codes.length} 个兑换码！\n\n兑换码已复制到剪贴板。\n\n${codesText}`);
+                closeGenerateCodesModal();
+                cacheState.codes.clear();
+                cacheState.stats.ts = 0;
+                loadCodes({ force: true });
+                loadStats({ force: true });
 
             } catch (error) {
                 if ((error.message || '').includes('未登录')) {
