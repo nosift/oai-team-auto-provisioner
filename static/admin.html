@@ -907,35 +907,33 @@
             }
 
             try {
-                let response;
+                let result;
                 if (currentEditingTeamIndex === null) {
                     // 添加新Team
-                    response = await fetch('/api/admin/teams', {
+                    result = await fetchJson('/api/admin/teams', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
                 } else {
                     // 更新现有Team
-                    response = await fetch(`/api/admin/teams/${currentEditingTeamIndex}`, {
+                    result = await fetchJson(`/api/admin/teams/${currentEditingTeamIndex}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
                 }
 
-                const result = await response.json();
-
-                if (result.success) {
-                    alert(result.message);
-                    closeTeamModal();
-                    cacheState.teams.ts = 0;
-                    loadTeamList({ force: true });
-                    loadTeamFilterOptions({ force: true }); // 刷新Team筛选选项
-                } else {
-                    alert('保存失败: ' + result.error);
-                }
+                alert(result.message || '保存成功');
+                closeTeamModal();
+                cacheState.teams.ts = 0;
+                loadTeamList({ force: true });
+                loadTeamFilterOptions({ force: true }); // 刷新Team筛选选项
             } catch (error) {
+                if ((error.message || '').includes('未登录')) {
+                    window.location.href = '/admin/login';
+                    return;
+                }
                 alert('保存失败: ' + error.message);
             }
         }
@@ -947,21 +945,16 @@
             }
 
             try {
-                const response = await fetch(`/api/admin/teams/${index}`, {
-                    method: 'DELETE'
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    alert(result.message);
-                    cacheState.teams.ts = 0;
-                    loadTeamList({ force: true });
-                    loadTeamFilterOptions({ force: true }); // 刷新Team筛选选项
-                } else {
-                    alert('删除失败: ' + result.error);
-                }
+                const result = await fetchJson(`/api/admin/teams/${index}`, { method: 'DELETE' });
+                alert(result.message || '删除成功');
+                cacheState.teams.ts = 0;
+                loadTeamList({ force: true });
+                loadTeamFilterOptions({ force: true }); // 刷新Team筛选选项
             } catch (error) {
+                if ((error.message || '').includes('未登录')) {
+                    window.location.href = '/admin/login';
+                    return;
+                }
                 alert('删除失败: ' + error.message);
             }
         }
@@ -1005,17 +998,14 @@
             }
 
             try {
-                const response = await fetch(`/api/admin/teams/${currentEditingTeamIndex}/generate-codes`, {
+                const result = await fetchJson(`/api/admin/teams/${currentEditingTeamIndex}/generate-codes`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
-                const result = await response.json();
-
-                if (result.success) {
-                    const codes = result.data.codes;
-                    const codesText = codes.join('\n');
+                const codes = result.data.codes;
+                const codesText = codes.join('\n');
 
                     // 创建文本区域用于复制
                     const textarea = document.createElement('textarea');
@@ -1025,16 +1015,11 @@
                     document.execCommand('copy');
                     document.body.removeChild(textarea);
 
-                    alert(`成功生成 ${codes.length} 个兑换码！\n\n兑换码已复制到剪贴板。\n\n${codesText}`);
-                    closeGenerateCodesModal();
-                    cacheState.codes.clear();
-                    cacheState.stats.ts = 0;
-                    loadCodes({ force: true }); // 刷新兑换码列表
-                    loadStats({ force: true });
-                } else {
-                    alert('生成失败: ' + result.error);
-                }
             } catch (error) {
+                if ((error.message || '').includes('未登录')) {
+                    window.location.href = '/admin/login';
+                    return;
+                }
                 alert('生成失败: ' + error.message);
             }
         }

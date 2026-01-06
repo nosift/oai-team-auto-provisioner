@@ -5,6 +5,7 @@ Flask Web服务器
 
 from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 from functools import wraps
+import os
 import secrets
 from datetime import datetime
 from redemption_service import RedemptionService
@@ -14,7 +15,19 @@ import config
 
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)  # 用于session加密
+
+# ==================== Session / Secret Key ====================
+# 多进程(gunicorn 多 worker)场景下，secret_key 必须固定，否则登录态会在不同 worker 间随机失效，
+# 前端请求 /api/* 会被重定向到 /admin/login，导致出现 “<!DOCTYPE ... is not valid JSON”。
+_secret_key = (
+    os.getenv("SECRET_KEY")
+    or os.getenv("FLASK_SECRET_KEY")
+    or config.get("web.secret_key")
+)
+if not _secret_key:
+    _secret_key = secrets.token_hex(32)
+    log.warning("未设置 SECRET_KEY/FLASK_SECRET_KEY/web.secret_key，已生成临时 session key；多实例/重启后登录态会失效")
+app.secret_key = _secret_key  # 用于 session 加密
 
 # 配置
 ADMIN_PASSWORD = config.get("web.admin_password", "admin123")
@@ -31,6 +44,9 @@ def require_admin(f):
             return jsonify({"error": "管理后台已禁用"}), 403
 
         if not session.get("admin_logged_in"):
+            # /api/* 接口返回 JSON，避免前端把 HTML 当 JSON 解析
+            if request.path.startswith("/api/"):
+                return jsonify({"success": False, "error": "未登录，请重新登录管理后台"}), 401
             return redirect(url_for("admin_login"))
         return f(*args, **kwargs)
     return decorated_function
