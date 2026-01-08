@@ -609,6 +609,7 @@
                         code.status === 'deleted' ? 'danger' :
                         'warning';
                     const expires = code.expires_at || '永久有效';
+                    const teamName = code.team_display_name || code.team_name || code.team_key || '-';
 
                     const toggleBtn = code.status === 'active'
                         ? `<button class="action-btn disable" onclick="updateCodeStatus('${code.code}', 'disabled')">禁用</button>`
@@ -623,7 +624,7 @@
                     html += `
                         <tr>
                             <td><code>${code.code}</code></td>
-                            <td>${code.team_name}</td>
+                            <td>${teamName}</td>
                             <td>${code.used_count}/${code.max_uses}</td>
                             <td><span class="badge ${statusBadge}">${statusText}</span></td>
                             <td>${expires}</td>
@@ -654,12 +655,13 @@
                 redemptions.forEach(r => {
                     const statusBadge = r.invite_status === 'success' ? 'success' : r.invite_status === 'failed' ? 'danger' : 'warning';
                     const time = new Date(r.redeemed_at).toLocaleString();
+                    const teamName = r.team_display_name || r.team_name || r.team_key || '-';
 
                     html += `
                         <tr>
                             <td>${r.email}</td>
                             <td><code>${r.code}</code></td>
-                            <td>${r.team_name}</td>
+                            <td>${teamName}</td>
                             <td><span class="badge ${statusBadge}">${r.invite_status}</span></td>
                             <td>${time}</td>
                             <td>${r.ip_address || '-'}</td>
@@ -686,10 +688,11 @@
 
                 teams.forEach(team => {
                     const time = new Date(team.last_updated).toLocaleString();
+                    const teamName = team.team_display_name || team.team_name || team.team_key || '-';
 
                     html += `
                         <tr>
-                            <td><strong>${team.team_name}</strong></td>
+                            <td><strong>${teamName}</strong></td>
                             <td>${team.total_seats}</td>
                             <td>${team.used_seats}</td>
                             <td>${team.pending_invites}</td>

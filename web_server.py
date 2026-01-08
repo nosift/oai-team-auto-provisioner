@@ -112,6 +112,32 @@ def _get_client_ip() -> str | None:
     return str(parsed[0]) if parsed else None
 
 
+def _team_index_from_any_name(team_name: str | None) -> int | None:
+    if not team_name:
+        return None
+    team = config.resolve_team(team_name)
+    if not team:
+        return None
+    account_id = team.get("account_id")
+    if account_id:
+        for idx, t in enumerate(config.TEAMS):
+            if t.get("account_id") == account_id:
+                return idx
+    # 兜底：按名称匹配
+    normalized = str(team.get("name") or "").strip().lower()
+    for idx, t in enumerate(config.TEAMS):
+        if str(t.get("name") or "").strip().lower() == normalized:
+            return idx
+    return None
+
+
+def _team_display_name(team_name: str | None) -> str | None:
+    if not team_name:
+        return None
+    team = config.resolve_team(team_name)
+    return (team or {}).get("name") or team_name
+
+
 # ==================== 用户API ====================
 
 @app.route("/")
@@ -263,7 +289,42 @@ def admin_stats():
         stats = db.get_dashboard_stats()
 
         # 获取Team统计
-        team_stats = db.list_team_stats()
+        raw_team_stats = db.list_team_stats()
+
+        # 只返回“当前已配置的 Team”，并对历史遗留的 Team1/Team2/Team3 名称做归一化，避免出现重复/莫名其妙的 TeamX
+        from team_manager import team_manager
+
+        teams = team_manager.get_team_list()
+        stats_by_index: dict[int, dict] = {}
+        for row in raw_team_stats:
+            idx = _team_index_from_any_name(row.get("team_name"))
+            if idx is None:
+                continue
+            prev = stats_by_index.get(idx)
+            if not prev:
+                stats_by_index[idx] = row
+                continue
+            # 保留更新时间更新的一条
+            if str(row.get("last_updated") or "") > str(prev.get("last_updated") or ""):
+                stats_by_index[idx] = row
+
+        team_stats: list[dict] = []
+        for team in teams:
+            idx = team.get("index")
+            if not isinstance(idx, int):
+                continue
+            row = stats_by_index.get(idx) or {}
+            team_stats.append(
+                {
+                    "team_name": team.get("name"),
+                    "team_index": idx,
+                    "total_seats": row.get("total_seats", 0),
+                    "used_seats": row.get("used_seats", 0),
+                    "pending_invites": row.get("pending_invites", 0),
+                    "available_seats": row.get("available_seats", 0),
+                    "last_updated": row.get("last_updated"),
+                }
+            )
 
         return jsonify({
             "success": True,
@@ -286,7 +347,22 @@ def admin_list_codes():
         status = request.args.get("status")
 
         include_deleted = request.args.get("include_deleted", "false").lower() in {"1", "true", "yes", "y", "on"}
-        codes = db.list_codes(team_name=team_name, status=status, include_deleted=include_deleted)
+
+        # 兼容：数据库中可能存的是 Team3 这类旧名字，但前端筛选用的是当前展示名
+        # 所以这里按“归一化后的 team_index”过滤，而不是直接按 team_name 字符串过滤
+        codes = db.list_codes(team_name=None, status=status, include_deleted=include_deleted)
+        target_idx = _team_index_from_any_name(team_name)
+        if target_idx is not None:
+            filtered = []
+            for c in codes:
+                if _team_index_from_any_name(c.get("team_name")) == target_idx:
+                    filtered.append(c)
+            codes = filtered
+
+        for c in codes:
+            c["team_key"] = c.get("team_name")
+            c["team_index"] = _team_index_from_any_name(c.get("team_name"))
+            c["team_name"] = _team_display_name(c.get("team_name")) or c.get("team_name")
 
         return jsonify({
             "success": True,
@@ -306,6 +382,10 @@ def admin_list_redemptions():
         offset = int(request.args.get("offset", 0))
 
         redemptions = db.list_redemptions(limit=limit, offset=offset)
+        for r in redemptions:
+            r["team_key"] = r.get("team_name")
+            r["team_index"] = _team_index_from_any_name(r.get("team_name"))
+            r["team_name"] = _team_display_name(r.get("team_name")) or r.get("team_name")
 
         return jsonify({
             "success": True,
