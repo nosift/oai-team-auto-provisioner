@@ -23,16 +23,16 @@ def _default_data_dir() -> Path:
     """
     数据目录（用于持久化）：
     - 优先使用环境变量 DATA_DIR / APP_DATA_DIR
-    - 容器环境默认使用 /app/data（Dockerfile 已创建该目录，Zeabur 可挂载持久化存储到此目录）
+    - 容器环境默认使用 /data（Zeabur Volume 默认挂载目录）或 /app/data
     - 否则回退到项目目录
     """
     env_dir = os.getenv("DATA_DIR") or os.getenv("APP_DATA_DIR")
     if env_dir:
         return Path(env_dir)
 
-    candidate = Path("/app/data")
-    if candidate.exists():
-        return candidate
+    for candidate in (Path("/data"), Path("/app/data")):
+        if candidate.exists():
+            return candidate
 
     return BASE_DIR
 
@@ -264,6 +264,14 @@ def get(key: str, default=None):
         env_value = os.getenv("REDEMPTION_DATABASE_FILE") or os.getenv("DATABASE_FILE")
         if env_value:
             return env_value
+
+    if key == "redemption.code_lock_seconds":
+        env_value = os.getenv("REDEMPTION_CODE_LOCK_SECONDS") or os.getenv("CODE_LOCK_SECONDS")
+        if env_value:
+            try:
+                return int(env_value)
+            except Exception:
+                pass
 
     keys = key.split(".")
     value = _cfg

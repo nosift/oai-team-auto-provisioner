@@ -97,7 +97,8 @@ TEAM_JSON_B64=<base64(team.json)>
 
 # 可选
 ENABLE_ADMIN=true
-REDEMPTION_DATABASE_FILE=/app/data/redemption.db
+DATA_DIR=/data
+REDEMPTION_DATABASE_FILE=/data/redemption.db
 ```
 
 **5. 部署完成**
@@ -123,7 +124,7 @@ zeabur deploy
 
 ### 数据持久化
 
-Zeabur自动持久化容器内的数据，SQLite数据库会自动保存。
+Zeabur 默认不保证容器文件持久化；请在 **Volumes** 挂载一个持久化卷到 `/data`，并设置 `DATA_DIR=/data`、`REDEMPTION_DATABASE_FILE=/data/redemption.db`，避免更新镜像/重启后兑换码与 Team 信息丢失。
 
 ### 查看日志
 
@@ -305,7 +306,8 @@ HEALTHCHECK CMD python -c "import urllib.request; ..."
 | `ADMIN_PASSWORD` | - | 管理后台密码 | 必填 |
 | `TEAM_JSON_B64` | - | Team 凭证（team.json 的 base64） | 必填 |
 | `TEAM_JSON` | - | Team 凭证（原始 JSON，可能需转义） | 可选 |
-| `REDEMPTION_DATABASE_FILE` | redemption.db | SQLite 路径 | /app/data/redemption.db |
+| `DATA_DIR` | /data | 数据目录（持久化卷挂载点） | /data |
+| `REDEMPTION_DATABASE_FILE` | redemption.db | SQLite 路径 | /data/redemption.db |
 | `ENABLE_ADMIN` | true | 是否启用后台 | true |
 
 ### 资源占用估算

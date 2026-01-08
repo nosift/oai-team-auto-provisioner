@@ -12,6 +12,7 @@ from redemption_service import RedemptionService
 from database import db
 from logger import log
 import config
+import ipaddress
 
 
 app = Flask(__name__)
@@ -52,6 +53,65 @@ def require_admin(f):
     return decorated_function
 
 
+def _get_client_ip() -> str | None:
+    """
+    获取真实客户端 IP（适配 Zeabur / 反向代理）。
+    默认信任 X-Forwarded-For / X-Real-IP（可通过 TRUST_PROXY=false 关闭）。
+    """
+    trust_proxy = os.getenv("TRUST_PROXY", "true").strip().lower() not in {"0", "false", "no", "off"}
+    if not trust_proxy:
+        return request.remote_addr
+
+    candidates: list[str] = []
+
+    # RFC 7239 Forwarded: for=...
+    forwarded = request.headers.get("Forwarded")
+    if forwarded:
+        parts = [p.strip() for p in forwarded.split(",")]
+        for part in parts:
+            for kv in part.split(";"):
+                kv = kv.strip()
+                if kv.lower().startswith("for="):
+                    v = kv[4:].strip().strip('"')
+                    # 可能带端口、IPv6 方括号
+                    if v.startswith("["):
+                        end = v.find("]")
+                        candidates.append(v[1:end] if end != -1 else v.strip("[]"))
+                    else:
+                        # IPv4:port
+                        candidates.append(v.split(":")[0] if v.count(":") == 1 else v)
+
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        # XFF: client, proxy1, proxy2
+        for ip in [p.strip() for p in xff.split(",") if p.strip()]:
+            candidates.append(ip)
+
+    xrip = request.headers.get("X-Real-IP")
+    if xrip:
+        candidates.append(xrip.strip())
+
+    # 最后回退到 remote_addr
+    if request.remote_addr:
+        candidates.append(request.remote_addr)
+
+    parsed: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    for ip in candidates:
+        try:
+            parsed.append(ipaddress.ip_address(ip))
+        except Exception:
+            continue
+
+    for addr in parsed:
+        try:
+            if addr.is_global:
+                return str(addr)
+        except Exception:
+            pass
+
+    return str(parsed[0]) if parsed else None
+
+
 # ==================== 用户API ====================
 
 @app.route("/")
@@ -76,8 +136,8 @@ def redeem():
         if not email or not code:
             return jsonify({"success": False, "error": "邮箱和兑换码不能为空"}), 400
 
-        # 获取客户端IP
-        ip_address = request.remote_addr
+        # 获取客户端IP（反代环境使用真实IP）
+        ip_address = _get_client_ip()
 
         # 执行兑换
         result = RedemptionService.redeem(code, email, ip_address)
@@ -444,9 +504,14 @@ def admin_refresh_team_stats():
 
         for team_info in teams:
             team_name = team_info["name"]
+            idx = team_info.get("index")
 
-            # 获取对应的team配置
-            team_config = config.resolve_team(team_name)
+            # 优先按索引匹配 config.TEAMS，避免 team_names 漂移导致错配
+            team_config = None
+            if isinstance(idx, int) and 0 <= idx < len(config.TEAMS):
+                team_config = config.TEAMS[idx]
+            if not team_config:
+                team_config = config.resolve_team(team_name)
 
             if not team_config:
                 continue

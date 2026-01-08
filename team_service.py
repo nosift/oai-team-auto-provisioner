@@ -1,9 +1,12 @@
 # ==================== Team 服务模块 ====================
 # 处理 ChatGPT Team 邀请相关功能
 
+from __future__ import annotations
+
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from time import time
 
 from config import (
     TEAMS,
@@ -30,6 +33,49 @@ def create_session_with_retry():
 
 
 http_session = create_session_with_retry()
+
+
+_CACHE_TTL_SECONDS = 12
+_invites_cache: dict[str, tuple[float, list]] = {}
+
+
+def _is_pending_invite(invite: dict) -> bool:
+    status = (
+        (invite.get("status") or invite.get("invite_status") or invite.get("state") or "")
+        .strip()
+        .lower()
+    )
+
+    if not status:
+        return True
+
+    # 只要不是明确的“已处理/已结束”状态，都认为仍待接受
+    if status in {"accepted", "completed", "done", "revoked", "canceled", "cancelled", "declined", "expired"}:
+        return False
+    return True
+
+
+def _extract_invite_items(payload) -> list:
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+
+    candidates = [
+        payload.get("items"),
+        payload.get("account_invites"),
+        payload.get("invites"),
+        payload.get("data"),
+    ]
+    for c in candidates:
+        if isinstance(c, list):
+            return c
+        if isinstance(c, dict):
+            inner = c.get("items") or c.get("account_invites") or c.get("invites")
+            if isinstance(inner, list):
+                return inner
+
+    return []
 
 
 def build_invite_headers(team: dict) -> dict:
@@ -181,18 +227,20 @@ def get_team_stats(team: dict) -> dict:
 
         data = response.json() or {}
 
-        # 订阅接口的 pending_invites 有时不准确（会返回 0），这里用 invites 列表兜底
-        pending_invites = (
+        # 订阅接口的 pending_invites 有时不准确，这里用 invites 列表兜底（取更大值）
+        pending_from_subs = (
             data.get("pending_invites")
             or data.get("pending_invites_count")
             or data.get("pending_invite_count")
             or 0
         )
-        if pending_invites == 0:
-            try:
-                pending_invites = len(get_pending_invites(team))
-            except Exception:
-                pass
+        pending_from_invites = 0
+        try:
+            pending_from_invites = len(get_pending_invites(team))
+        except Exception:
+            pending_from_invites = 0
+
+        pending_invites = max(int(pending_from_subs or 0), int(pending_from_invites or 0))
 
         return {
             "seats_in_use": data.get("seats_in_use", 0),
@@ -206,7 +254,7 @@ def get_team_stats(team: dict) -> dict:
         return {}
 
 
-def get_pending_invites(team: dict) -> list:
+def get_pending_invites(team: dict, *, max_items: int = 500) -> list:
     """获取 Team 的待处理邀请列表
 
     Args:
@@ -215,20 +263,51 @@ def get_pending_invites(team: dict) -> list:
     Returns:
         list: 待处理邀请列表
     """
+    cache_key = team.get("account_id") or team.get("name") or ""
+    if cache_key:
+        cached = _invites_cache.get(cache_key)
+        if cached and (time() - cached[0]) < _CACHE_TTL_SECONDS:
+            return cached[1]
+
     headers = build_invite_headers(team)
-    url = f"https://chatgpt.com/backend-api/accounts/{team['account_id']}/invites?offset=0&limit=100&query="
+
+    pending: list = []
+    offset = 0
+    limit = 100
 
     try:
-        response = http_session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        while len(pending) < max_items:
+            url = (
+                f"https://chatgpt.com/backend-api/accounts/{team['account_id']}/invites"
+                f"?offset={offset}&limit={limit}&query="
+            )
+            response = http_session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
 
-        if response.status_code == 200:
+            if response.status_code != 200:
+                break
+
             data = response.json()
-            return data.get("items", [])
+            items = _extract_invite_items(data)
+            if not items:
+                break
+
+            for item in items:
+                if isinstance(item, dict) and _is_pending_invite(item):
+                    pending.append(item)
+                    if len(pending) >= max_items:
+                        break
+
+            offset += len(items)
+            if len(items) < limit:
+                break
 
     except Exception as e:
         log.warning(f"获取待处理邀请异常: {e}")
 
-    return []
+    if cache_key:
+        _invites_cache[cache_key] = (time(), pending)
+
+    return pending
 
 
 def check_available_seats(team: dict) -> int:

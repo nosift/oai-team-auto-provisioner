@@ -27,7 +27,9 @@ def init_database():
                 expires_at DATETIME,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 status VARCHAR(20) DEFAULT 'active',
-                notes TEXT
+                notes TEXT,
+                locked_by TEXT,
+                locked_until DATETIME
             )
         """)
 

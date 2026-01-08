@@ -18,13 +18,17 @@ class Database:
         if db_file is None:
             import config
 
-            db_file = config.get("redemption.database_file", "redemption.db")
+            db_file = config.get("redemption.database_file", str(config.DATA_DIR / "redemption.db"))
 
         if db_file != ":memory:":
             try:
                 db_path = Path(db_file)
-                if db_path.parent != Path("."):
-                    db_path.parent.mkdir(parents=True, exist_ok=True)
+                if not db_path.is_absolute():
+                    # 相对路径统一落到 DATA_DIR（容器持久化卷通常挂载到 /data）
+                    import config
+
+                    db_path = Path(config.DATA_DIR) / db_path
+                db_path.parent.mkdir(parents=True, exist_ok=True)
                 db_file = str(db_path)
             except Exception:
                 pass
@@ -63,9 +67,19 @@ class Database:
                     expires_at DATETIME,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     status VARCHAR(20) DEFAULT 'active',
-                    notes TEXT
+                    notes TEXT,
+                    locked_by TEXT,
+                    locked_until DATETIME
                 )
             """)
+
+            # 兼容旧库：补齐并发锁字段
+            cursor.execute("PRAGMA table_info(redemption_codes)")
+            cols = {row["name"] for row in cursor.fetchall()}
+            if "locked_by" not in cols:
+                cursor.execute("ALTER TABLE redemption_codes ADD COLUMN locked_by TEXT")
+            if "locked_until" not in cols:
+                cursor.execute("ALTER TABLE redemption_codes ADD COLUMN locked_until DATETIME")
 
             # 创建兑换记录表
             cursor.execute("""
@@ -107,6 +121,16 @@ class Database:
             """)
 
             log.info("数据库初始化完成", icon="success")
+
+    def _ensure_code_lock_columns(self):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(redemption_codes)")
+            cols = {row["name"] for row in cursor.fetchall()}
+            if "locked_by" not in cols:
+                cursor.execute("ALTER TABLE redemption_codes ADD COLUMN locked_by TEXT")
+            if "locked_until" not in cols:
+                cursor.execute("ALTER TABLE redemption_codes ADD COLUMN locked_until DATETIME")
 
     # ==================== 兑换码管理 ====================
 
@@ -153,8 +177,17 @@ class Database:
         if not code_info:
             return False, "兑换码不存在"
 
-        if code_info["status"] != "active":
-            return False, f"兑换码状态异常: {code_info['status']}"
+        status = code_info.get("status")
+        if status != "active":
+            if status == "used_up":
+                return False, "兑换码已用完"
+            if status == "expired":
+                return False, "兑换码已过期"
+            if status == "disabled":
+                return False, "兑换码已禁用"
+            if status == "deleted":
+                return False, "兑换码已删除"
+            return False, f"兑换码状态异常: {status}"
 
         # 检查过期时间
         if code_info["expires_at"]:
@@ -172,6 +205,132 @@ class Database:
             return False, "兑换码已用完"
 
         return True, "有效"
+
+    def reserve_code(self, code: str, *, lock_by: str, lock_seconds: int = 120) -> tuple[bool, str, Optional[Dict[str, Any]]]:
+        """
+        以数据库级锁的方式预占兑换码，避免并发兑换造成超发。
+
+        - 成功: 返回 (True, "OK", code_info)
+        - 失败: 返回 (False, message, None)
+
+        注意：该预占仅用于短时间内串行化兑换流程，需要在兑换结束后调用
+        consume_reserved_code/release_reserved_code 清理锁。
+        """
+        if not code:
+            return False, "兑换码不能为空", None
+
+        self._ensure_code_lock_columns()
+
+        now = datetime.now()
+        now_str = now.isoformat(sep=" ", timespec="seconds")
+        lock_until = (now + timedelta(seconds=max(5, int(lock_seconds or 120)))).isoformat(
+            sep=" ", timespec="seconds"
+        )
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                UPDATE redemption_codes
+                SET locked_by = ?, locked_until = ?
+                WHERE code = ?
+                  AND status = 'active'
+                  AND (expires_at IS NULL OR expires_at > ?)
+                  AND used_count < max_uses
+                  AND (locked_until IS NULL OR locked_until <= ?)
+            """,
+                (lock_by, lock_until, code, now_str, now_str),
+            )
+
+            if cursor.rowcount == 1:
+                cursor.execute("SELECT * FROM redemption_codes WHERE code = ?", (code,))
+                row = cursor.fetchone()
+                return True, "OK", dict(row) if row else None
+
+            cursor.execute("SELECT * FROM redemption_codes WHERE code = ?", (code,))
+            row = cursor.fetchone()
+            if not row:
+                return False, "兑换码不存在", None
+
+            code_info = dict(row)
+            status = code_info.get("status")
+            if status != "active":
+                return False, f"兑换码状态异常: {status}", None
+
+            if code_info.get("expires_at"):
+                try:
+                    expires_at = datetime.fromisoformat(code_info["expires_at"])
+                    if datetime.now() > expires_at:
+                        cursor.execute(
+                            "UPDATE redemption_codes SET status = 'expired' WHERE code = ?",
+                            (code,),
+                        )
+                        return False, "兑换码已过期", None
+                except Exception:
+                    pass
+
+            used_count = int(code_info.get("used_count") or 0)
+            max_uses = int(code_info.get("max_uses") or 0)
+            if used_count >= max_uses:
+                cursor.execute(
+                    "UPDATE redemption_codes SET status = 'used_up' WHERE code = ? AND status = 'active'",
+                    (code,),
+                )
+                return False, "兑换码已用完", None
+
+            locked_until_val = code_info.get("locked_until")
+            if locked_until_val:
+                try:
+                    locked_until_dt = datetime.fromisoformat(locked_until_val)
+                    if locked_until_dt > datetime.now():
+                        return False, "兑换码正在被使用，请稍后再试", None
+                except Exception:
+                    return False, "兑换码正在被使用，请稍后再试", None
+
+            return False, "兑换码暂不可用，请稍后重试", None
+
+    def release_reserved_code(self, code: str, *, lock_by: str):
+        """释放预占的兑换码锁"""
+        if not code:
+            return
+        self._ensure_code_lock_columns()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE redemption_codes
+                SET locked_by = NULL, locked_until = NULL
+                WHERE code = ? AND locked_by = ?
+            """,
+                (code, lock_by),
+            )
+
+    def consume_reserved_code(self, code: str, *, lock_by: str) -> bool:
+        """
+        消费已预占的兑换码：增加 used_count 并释放锁。
+        仅当 locked_by 匹配时生效，返回是否成功。
+        """
+        if not code:
+            return False
+        self._ensure_code_lock_columns()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE redemption_codes
+                SET used_count = used_count + 1,
+                    status = CASE
+                        WHEN (used_count + 1) >= max_uses THEN 'used_up'
+                        ELSE status
+                    END,
+                    locked_by = NULL,
+                    locked_until = NULL
+                WHERE code = ? AND locked_by = ?
+            """,
+                (code, lock_by),
+            )
+            return cursor.rowcount == 1
 
     def update_code_status(self, code: str, status: str):
         """更新兑换码状态"""

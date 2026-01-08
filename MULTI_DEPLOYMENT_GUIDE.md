@@ -201,7 +201,8 @@ docker-compose --profile with-nginx up -d
 | `ADMIN_PASSWORD` | - | 管理员密码 | SecurePass123 |
 | `TEAM_JSON_B64` | - | Team 凭证（team.json 的 base64） | ewo... |
 | `TEAM_JSON` | - | Team 凭证（原始 JSON，可能需转义） | [{"user":...}] |
-| `REDEMPTION_DATABASE_FILE` | redemption.db | SQLite 文件路径 | /app/data/redemption.db |
+| `DATA_DIR` | /data | 数据目录（持久化卷挂载点） | /data |
+| `REDEMPTION_DATABASE_FILE` | redemption.db | SQLite 文件路径 | /data/redemption.db |
 | `ENABLE_ADMIN` | true | 是否启用管理后台 | true |
 
 ### 多版本镜像

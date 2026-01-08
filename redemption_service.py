@@ -5,6 +5,7 @@
 
 from datetime import datetime
 from typing import Dict, Any, Optional
+import uuid
 from database import db
 from team_service import batch_invite_to_team, get_team_stats
 from logger import log
@@ -29,6 +30,12 @@ class RedemptionService:
         Returns:
             兑换结果字典
         """
+        code = (code or "").strip().upper()
+        email = (email or "").strip().lower()
+
+        lock_id: str | None = None
+        reserved = False
+
         try:
             # 1. 验证邮箱格式
             if not RedemptionService._validate_email(email):
@@ -55,32 +62,28 @@ class RedemptionService:
                     "code": "EMAIL_ALREADY_REDEEMED",
                 }
 
-            # 4. 验证兑换码
-            valid, message = db.verify_code(code)
-            if not valid:
+            # 4. 预占兑换码（数据库级并发锁）
+            lock_id = uuid.uuid4().hex
+            lock_seconds = int(config.get("redemption.code_lock_seconds", 120) or 120)
+            ok, message, code_info = db.reserve_code(code, lock_by=lock_id, lock_seconds=lock_seconds)
+            if not ok or not code_info:
                 return {"success": False, "error": message, "code": "INVALID_CODE"}
-
-            # 5. 获取兑换码信息
-            code_info = db.get_code(code)
-            if not code_info:
-                return {
-                    "success": False,
-                    "error": "兑换码不存在",
-                    "code": "CODE_NOT_FOUND",
-                }
+            reserved = True
 
             team_name = code_info["team_name"]
 
-            # 6. 检查Team席位
+            # 5. 检查Team席位
             seat_check = RedemptionService._check_team_seats(team_name)
             if not seat_check["available"]:
+                db.release_reserved_code(code, lock_by=lock_id)
+                reserved = False
                 return {
                     "success": False,
                     "error": seat_check["message"],
                     "code": "NO_SEATS",
                 }
 
-            # 7. 创建兑换记录
+            # 6. 创建兑换记录
             redemption_id = db.create_redemption(
                 code_id=code_info["id"],
                 email=email,
@@ -88,18 +91,23 @@ class RedemptionService:
                 ip_address=ip_address,
             )
 
-            # 8. 邀请用户到Team
+            # 7. 邀请用户到Team
+            db.update_redemption_status(redemption_id, "inviting")
             log.info(f"正在邀请 {email} 到 Team {team_name}...")
             invite_result = RedemptionService._invite_to_team(email, team_name)
 
             if invite_result["success"]:
-                # 9. 更新兑换记录状态为成功
+                # 8. 更新兑换记录状态为成功
                 db.update_redemption_status(redemption_id, "success")
 
-                # 10. 增加兑换码使用次数
-                db.increment_code_usage(code)
+                # 9. 消费预占的兑换码（增加使用次数并释放锁）
+                if not db.consume_reserved_code(code, lock_by=lock_id):
+                    # 兜底：避免因锁过期导致未计数
+                    db.increment_code_usage(code)
+                    db.release_reserved_code(code, lock_by=lock_id)
+                reserved = False
 
-                # 11. 更新Team统计
+                # 10. 更新Team统计
                 RedemptionService._update_team_stats(team_name)
 
                 log.info(f"{email} 兑换成功", icon="success")
@@ -118,6 +126,8 @@ class RedemptionService:
                 db.update_redemption_status(
                     redemption_id, "failed", invite_result["error"]
                 )
+                db.release_reserved_code(code, lock_by=lock_id)
+                reserved = False
 
                 log.error(f"{email} 邀请失败: {invite_result['error']}")
 
@@ -134,6 +144,12 @@ class RedemptionService:
                 "error": f"系统错误: {str(e)}",
                 "code": "SYSTEM_ERROR",
             }
+        finally:
+            if reserved and lock_id:
+                try:
+                    db.release_reserved_code(code, lock_by=lock_id)
+                except Exception:
+                    pass
 
     @staticmethod
     def verify_code_info(code: str) -> Dict[str, Any]:
